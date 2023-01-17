@@ -49,28 +49,9 @@ def make_hist(result_dict, hist_type):
 
 def make_txt_result(result_dict, result_dir, result_type):
 
-    f = None
+    os.makedirs(result_dir, exist_ok=True)
 
-    if result_type == 'et_prob':
-        f = open(result_dir+'et_prob.txt','w')
-
-    elif result_type == 'et_hist':
-        f = open(result_dir+'et_hist.txt','w')
-
-    elif result_type == 'e2e_prob':
-        f = open(result_dir+'e2e_prob.txt','w')
-
-    elif result_type == 'e2e_hist':
-        f = open(result_dir+'e2e_hist.txt', 'w')
-
-    elif result_type == 'rt_hist':
-        f = open(result_dir+'rt_hist.txt','w')
-
-    elif result_type == 'rt_prob':
-        f = open(result_dir+'rt_prob.txt','w')
-
-    elif result_type == 'et_orig':
-        f = open(result_dir+'et_orig_list.txt','w')
+    f = open(result_dir + result_type + '.txt', 'w')
 
     for result in result_dict:
         name = result
