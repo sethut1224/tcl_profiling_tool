@@ -50,9 +50,9 @@ def make_hist(result_dict, hist_type):
 def make_txt_result(result_dict, result_dir, result_type):
 
     os.makedirs(result_dir, exist_ok=True)
-
-    f = open(result_dir + result_type + '.txt', 'w')
-
+    
+    f = open(os.path.join(result_dir,result_type + '.txt'), 'w')
+    
     for result in result_dict:
         name = result
         data = result_dict[result]
