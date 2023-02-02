@@ -13,6 +13,65 @@ import rosbag2_py
 import numpy as np
 import argparse
 
+def get_shortcut_from_task_name(task_name):
+    name = ''
+    if task_name == 'virtual_driver_vlp16_front':
+        name = 'FRONT_LID'
+    elif task_name == 'virtual_driver_vlp16_rear':
+        name = 'REAR_LID'
+    elif task_name == 'filter_transform_vlp16_front':
+        name = 'FRONT_PFT'
+    elif task_name == 'filter_transform_vlp16_rear':
+        name = 'REAR_PFT'
+    elif task_name == 'point_cloud_fusion':
+        name = 'PCF'
+    elif task_name == 'ray_ground_classifier':
+        name = 'RGF'
+    elif task_name =='euclidean_clustering':
+        name = 'EUC'
+    elif task_name == 'voxel_grid':
+        name = 'VGF'
+    elif task_name == 'ndt_localizer':
+        name = 'NDT'
+    elif task_name == 'virtual_driver_camera':
+        name = 'CAM'
+    elif task_name == 'tensorrt_yolo':
+        name = 'TRT'
+    elif task_name == 'vision_detections':
+        name = 'VID'
+    elif task_name == 'multi_object_tracker':
+        name = 'MOT'    
+    elif task_name == 'virtual_driver_vehicle_kinematic_state':
+        name = 'ODM'
+    elif task_name == 'universe_ekf_localizer':
+        name = 'EKF'
+    elif task_name == 'behavior_planner':
+        name = 'BHP'
+    elif task_name == 'pure_pursuit':
+        name = 'PPS'
+    elif task_name == 'simulation/dummy_perception_publisher':
+        name = 'DPP'
+    elif task_name == 'simulation/detected_object_feature_remover':
+        name = 'OFR'
+    elif task_name == 'perception/object_recognition/tracking/multi_object_tracker':
+        name = 'MOT'
+    elif task_name == 'perception/object_recognition/prediction/map_based_prediciton':
+        name = 'MBP'
+    elif task_name == 'planning/scenario_planning/lane_driving/behavior_planning/behavior_path_planner':
+        name = 'BPP'
+    elif task_name == 'planning/scenario_planning/lane_driving/behavior_planning/behavior_velocity_planner':
+        name = 'BVP'
+    elif task_name == 'planning/scenario_planning/lane_driving/motion_planning/obstacle_avoidance_planner':
+        name = 'OAP'
+    elif task_name == 'planning/scenario_planning/lane_driving/motion_planning/obstacle_cruise_planner':
+        name = 'OCP'
+    elif task_name == 'planning/scenario_planning/motion_velocity_smoother':
+        name = 'MVS'
+    elif task_name == 'control/trajectory_follower/mpc_follower':
+        name = 'MPC'
+    else:
+        name = ''
+    return name
 
 def top_of_cum_dist(cum_list, prob_th):
     """
@@ -49,10 +108,29 @@ def make_hist(result_dict, hist_type):
 
 def make_txt_result(result_dict, result_dir, result_type):
 
-    os.makedirs(result_dir, exist_ok=True)
-    
-    f = open(os.path.join(result_dir,result_type + '.txt'), 'w')
-    
+    f = None
+
+    if result_type == 'et_prob':
+        f = open(result_dir+'et_prob.txt','w')
+
+    elif result_type == 'et_hist':
+        f = open(result_dir+'et_hist.txt','w')
+
+    elif result_type == 'e2e_prob':
+        f = open(result_dir+'e2e_prob.txt','w')
+
+    elif result_type == 'e2e_hist':
+        f = open(result_dir+'e2e_hist.txt', 'w')
+
+    elif result_type == 'rt_hist':
+        f = open(result_dir+'rt_hist.txt','w')
+
+    elif result_type == 'rt_prob':
+        f = open(result_dir+'rt_prob.txt','w')
+
+    elif result_type == 'et_orig':
+        f = open(result_dir+'et_orig_list.txt','w')
+
     for result in result_dict:
         name = result
         data = result_dict[result]
@@ -130,6 +208,7 @@ def process_execution_time_orig(profile_data): #실행시간을 한 태스크의
             if execution_time_result.get(task_name) == None:
                 execution_time_result[task_name] = list()
             
+            print(task_name, elapse_ceil)
             execution_time_result[task_name].append(elapse_ceil) #task 단위로 execution time 의 history 저장
                                                                  ########################################
                                                                  # execution_time_result 구조
@@ -216,7 +295,7 @@ def process_response_time(profile_data):
 
     return response_time_result
 
-def process_e2e_latency_task_to_task(profile_data, paths):
+def process_e2e_latency_using_source_sink(profile_data, paths):
 
     e2e_latency_result = dict()
 
@@ -260,7 +339,7 @@ def process_e2e_latency_task_to_task(profile_data, paths):
             if data[0].task_name == source_task_name:
                 for msg_info in data[0].msg_infos:
                     if sink_result.get(msg_info.msg_id) is not None: #sink 와 source 의 msg_id 가 같으면
-                        elapse = (sink_result[msg_info.msg_id] - data[1]) * 1.0e-6 #sink_task response_time.end - source task response_time.start (or msg create time)
+                        elapse = (sink_result[msg_info.msg_id] - data[0].msg_infos.creation_time) * 1.0e-6 #sink_task response_time.end - source task response_time.start (or msg create time)
                         if e2e_latency_result.get(objective_path_str) == None:
                             e2e_latency_result[objective_path_str] = list()
                         e2e_latency_result[objective_path_str].append(elapse)
@@ -282,33 +361,87 @@ def process_e2e_latency_task_to_task(profile_data, paths):
 
     return e2e_latency_result
 
+def process_e2e_latency_using_sink(profile_data, paths):
+
+    e2e_latency_result = dict()
+
+    for key, path in paths.items():
+        sink_task_name = path[-1]
+        sink_task_cpu = None
+
+        objective_path_str = str(path) #관심 경로
+
+        sink_result = dict()
+
+        msg_ids = []
+        for cpu, profile in profile_data.items():
+            for data in profile:
+                if data[0].task_name == sink_task_name:
+                    sink_task_cpu = cpu
+                if sink_task_cpu is not None:
+                    break 
+        #profile data 가 cpu 단위로 저장되기 때문에 source, sink task 의 cpu 번호 저장        
+
+        for data in profile_data[sink_task_cpu]:
+            if data[0].task_name == sink_task_name:
+                for msg_info in data[0].msg_infos:
+                    task_history_set = set(msg_info.task_history)
+                    path_set = set(path)
+                    if path_set.intersection(task_history_set) == path_set: #timing info 에 objective_path 가 존재하는지
+                        elapse = (data[2] - msg_info.creation_time) * 1.0e-6
+                        if e2e_latency_result.get(key) == None:
+                            e2e_latency_result[key] = list()
+                        if msg_info.msg_id not in msg_ids:
+                            e2e_latency_result[key].append(elapse)   
+                            msg_ids.append(msg_info.msg_id)
+                        break                                   #msg_id 단위로 sink task 의 response_time.end 저장
+                                                                ########################################
+                                                                # sink_result 구조
+                                                                # {
+                                                                #  1 : [165423434.12351231]
+                                                                #  2 : [165423434.15431230]
+                                                                #  ...
+                                                                # }  
+                            
+    for key, value in e2e_latency_result.items():
+        print(key + ' e2e latency')
+        print('max' , round(max(value)))
+        print('min' , round(min(value)))
+        print('avg' , round(sum(value)/len(value)))
+        print('------')     
+
+    return e2e_latency_result
+
 def main(args):
     input_dir = args.input
     output_dir = args.output
 
     # 태스크 - 코어 할당 정보
-    cpu0 = ['front_lidar_driver', 'point_cloud_fusion', 'voxel_grid_filter', 'ndt_localizer']
-    cpu1 = ['rear_lidar_driver', 'point_cloud_fusion', 'ray_ground_filter', 'euclidean_clustering']
-
-    task_cpu_infos = [cpu0, cpu1]
+    cpu0 = ['virtual_driver_vlp16_front',  'point_cloud_fusion', 'voxel_grid', 'ndt_localizer']
+    cpu1 = ['virtual_driver_vlp16_rear',   'point_cloud_fusion', 'ray_ground_classifier', 'euclidean_clustering']
+    cpu2 = ['virtual_driver_camera', 'tensorrt_yolo', 'vision_detections', 'multi_object_tracker']
+    cpu3 = ['virtual_driver_vehicle_kinematic_state', 'universe_ekf_localizer', 'behavior_planner', 'pure_pursuit']
+    
+    task_cpu_infos = [cpu0, cpu1, cpu2, cpu3]
 
     # e2e latency 를 얻고자하는 관심 경로 (경로 상의 모든 태스크 입력)
-    e2e_paths = [
-        ['front_lidar_driver', 'point_cloud_fusion', 'voxel_grid_filter', 'ndt_localizer'],
-        ['front_lidar_driver', 'point_cloud_fusion', 'ray_ground_filter', 'euclidean_clustering'],
-        ['rear_lidar_driver', 'point_cloud_fusion', 'voxel_grid_filter', 'ndt_localizer'],
-        ['rear_lidar_driver', 'point_cloud_fusion', 'ray_ground_filter', 'euclidean_clustering'],
-    ]
+    e2e_paths = {
+        'FRONT_LIDAR_LOC' : ['virtual_driver_vlp16_front',  'point_cloud_fusion', 'voxel_grid', 'ndt_localizer', 'universe_ekf_localizer', 'behavior_planner', 'pure_pursuit'],
+        'REAR_LIDAR_LOC' : ['virtual_driver_vlp16_rear',    'point_cloud_fusion', 'voxel_grid', 'ndt_localizer', 'universe_ekf_localizer', 'behavior_planner', 'pure_pursuit'],
+        'FRONT_LIDAR_DET' : ['virtual_driver_vlp16_front',  'point_cloud_fusion', 'ray_ground_classifier', 'euclidean_clustering', 'multi_object_tracker', 'behavior_planner', 'pure_pursuit'],
+        'REAR_LIDAR_DET' :[ 'virtual_driver_vlp16_rear',    'point_cloud_fusion', 'ray_ground_classifier', 'euclidean_clustering', 'multi_object_tracker', 'behavior_planner', 'pure_pursuit'],
+        'ODOM' : ['virtual_driver_vehicle_kinematic_state', 'universe_ekf_localizer', 'behavior_planner', 'pure_pursuit']
+    }
 
     profile_data = raw_profile(input_dir, task_cpu_infos) #rosbag 을 읽고, cpu 단위로 task 들의 profile data 저장
 
     # execution_time_data = process_execution_time_orig(profile_data) #profile_data 를 사용하여 task 들의 execution_time 분포 획득
-                                                                    # 실행시간을 한 태스크의 시작 - 종료로 정의한 오리지널 버전
+                                                                    #실행시간을 한 태스크의 시작 - 종료로 정의한 오리지널 버전
 
     execution_time_data = process_execution_time_task_to_task(task_cpu_infos, profile_data) #profile_data 를 사용하여 task 들의 execution_time 분포 획득
-                                                                            #실행시간을 선행 태스크의 시작 - 후행 태스크의 시작으로 정의한 버전
+                                                                            # 실행시간을 선행 태스크의 시작 - 후행 태스크의 시작으로 정의한 버전
 
-    e2e_latency_data    = process_e2e_latency_task_to_task(profile_data, e2e_paths) #profile_data 를 사용하여 e2e_path 의 e2e_latency 분포 획득
+    e2e_latency_data    = process_e2e_latency_using_sink(profile_data, e2e_paths) #profile_data 를 사용하여 e2e_path 의 e2e_latency 분포 획득
     
     execution_time_prob = make_hist(execution_time_data, 'prob') #각 task 의 execution time 확률 분포 획득
     e2e_latency_prob = make_hist(e2e_latency_data, 'prob') #각 관심 경로의 e2e latency 확률 분포 획득
